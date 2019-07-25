@@ -1,5 +1,5 @@
 language: java
-dist: trusty
+dist: bionic
 sudo: required
 addons:
   postgresql: "9.4"
