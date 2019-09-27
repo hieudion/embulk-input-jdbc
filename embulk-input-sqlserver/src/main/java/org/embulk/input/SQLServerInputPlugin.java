@@ -12,6 +12,7 @@ import org.embulk.config.ConfigException;
 import org.embulk.input.jdbc.AbstractJdbcInputPlugin;
 import org.embulk.input.jdbc.JdbcInputConnection;
 import org.embulk.input.jdbc.getter.ColumnGetterFactory;
+import org.embulk.input.sqlserver.MSSqlServerInfo;
 import org.embulk.input.sqlserver.SQLServerInputConnection;
 
 import com.google.common.base.Optional;
@@ -255,7 +256,17 @@ public class SQLServerInputPlugin
                 if (sqlServerTask.getPort() != DEFAULT_PORT) {
                     logger.warn("'port: {}' option is ignored because instance option is set", sqlServerTask.getPort());
                 }
-                url = String.format(ENGLISH, "jdbc:sqlserver://%s\\%s", sqlServerTask.getHost().get(), sqlServerTask.getInstance().get());
+
+                // default port
+                int port = 1433;
+                try {
+                    // resolve the port from instance name
+                    MSSqlServerInfo msSqlServerInfo = new MSSqlServerInfo(sqlServerTask.getHost().get());
+                    port = msSqlServerInfo.getPortForInstance(sqlServerTask.getInstance().get());
+                } catch (SQLException e) {
+                    logger.warn("Unable to connect to SQL Browser to resolve port from instance name " + sqlServerTask.getInstance().get() + ", use default port 1433 to try to connect");
+                }
+                url = String.format(ENGLISH, "jdbc:sqlserver://%s:%d", sqlServerTask.getHost().get(), port);
             }
             else {
                 url = String.format(ENGLISH, "jdbc:sqlserver://%s:%d", sqlServerTask.getHost().get(), sqlServerTask.getPort());
