@@ -1,5 +1,6 @@
 package org.embulk.input;
 
+import java.net.SocketTimeoutException;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.SQLException;
@@ -258,13 +259,19 @@ public class SQLServerInputPlugin
                 }
 
                 // default port
-                int port = 1433;
+                int port = -1;
                 try {
                     // resolve the port from instance name
                     MSSqlServerInfo msSqlServerInfo = new MSSqlServerInfo(sqlServerTask.getHost().get());
                     port = msSqlServerInfo.getPortForInstance(sqlServerTask.getInstance().get());
-                } catch (SQLException e) {
+                }
+                catch (SocketTimeoutException e) {
                     logger.warn("Unable to connect to SQL Browser to resolve port from instance name " + sqlServerTask.getInstance().get() + ", use default port 1433 to try to connect");
+                    port = 1433;
+                }
+                catch (SQLException e) {
+                    e.printStackTrace();
+                    throw new ConfigException("Unable to connect to SQL Browser to resolve port from instance name " +  sqlServerTask.getInstance().get());
                 }
                 url = String.format(ENGLISH, "jdbc:sqlserver://%s:%d", sqlServerTask.getHost().get(), port);
             }

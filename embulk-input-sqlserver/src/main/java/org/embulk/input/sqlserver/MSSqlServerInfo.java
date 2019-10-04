@@ -2,10 +2,10 @@ package org.embulk.input.sqlserver;
 
 import org.embulk.config.ConfigException;
 
-import java.io.InterruptedIOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.SocketTimeoutException;
 import java.sql.SQLException;
 
 /**
@@ -31,8 +31,8 @@ import java.sql.SQLException;
  * < 000000d0 45 59 5c 70 69 70 65 5c 4d 53 53 51 4c 24 44 4f # EY\pipe\MSSQL$DO
  * < 000000e0 47 5c 73 71 6c 5c 71 75 65 72 79 3b 3b          # G\sql\query;;
  * </pre>
- *
- *  Clone from jTDS
+ * <p>
+ * Clone from jTDS
  */
 public class MSSqlServerInfo
 {
@@ -40,8 +40,11 @@ public class MSSqlServerInfo
     private final int timeout = 2000;
     private String[] serverInfoStrings;
 
-    public MSSqlServerInfo(String host) throws SQLException {
+    public MSSqlServerInfo(String host)
+        throws SQLException, SocketTimeoutException
+    {
         DatagramSocket socket = null;
+        int socketTimeoutCount = 0;
         try {
             InetAddress addr = InetAddress.getByName(host);
             socket = new DatagramSocket();
@@ -52,6 +55,7 @@ public class MSSqlServerInfo
 
             for (int i = 0; i < numRetries; i++) {
                 try {
+
                     DatagramPacket responsep;
                     byte[] buf = new byte[0]; // init with an array of length 0, will be expanded with every iteration
                     int length;
@@ -70,19 +74,24 @@ public class MSSqlServerInfo
 
                     return;
                 }
-                catch (InterruptedIOException toEx) {
+                catch (SocketTimeoutException toEx) {
                     // do nothing here
+                    socketTimeoutCount++;
                 }
             }
-        } catch (Exception e) {
+        }
+        catch (Exception e) {
             throw new RuntimeException(e);
-        } finally {
+        }
+        finally {
             if (socket != null) {
                 socket.close();
             }
         }
-
-        throw new SQLException( "Unable to get information from SQL Server: " + host, "HY000");
+        if (socketTimeoutCount == numRetries) {
+            throw new SocketTimeoutException();
+        }
+        throw new SQLException("Unable to get information from SQL Server: " + host, "HY000");
     }
 
     /**
@@ -93,9 +102,11 @@ public class MSSqlServerInfo
      *
      * @param instanceName
      * @return port the given instance is listening on, or -1 if it can't be
-     *         found.
+     * found.
      */
-    public int getPortForInstance(String instanceName) throws SQLException {
+    public int getPortForInstance(String instanceName)
+        throws SQLException
+    {
         if (serverInfoStrings == null) {
             throw new SQLException("Unable to get information from SQL Server");
         }
@@ -113,7 +124,8 @@ public class MSSqlServerInfo
             if (serverInfoStrings[index].length() == 0) {
                 curInstance = null;
                 curPort = null;
-            } else {
+            }
+            else {
                 String key = serverInfoStrings[index];
                 String value = "";
 
@@ -132,15 +144,16 @@ public class MSSqlServerInfo
                 }
 
                 if (curInstance != null
-                        && curPort != null
-                        && curInstance.equalsIgnoreCase(instanceName)) {
+                    && curPort != null
+                    && curInstance.equalsIgnoreCase(instanceName)) {
 
                     try {
                         return Integer.parseInt(curPort);
-                    } catch (NumberFormatException e) {
+                    }
+                    catch (NumberFormatException e) {
                         throw new SQLException(
-                                "Could not parse instance port number " + instanceName,
-                                "HY000");
+                            "Could not parse instance port number " + instanceName,
+                            "HY000");
                     }
                 }
             }
@@ -150,16 +163,18 @@ public class MSSqlServerInfo
         throw new ConfigException("Unable to find instance name: " + instanceName);
     }
 
-    private static final String extractString(byte[] buf, int len) {
+    private static final String extractString(byte[] buf, int len)
+    {
         // the first three bytes are unknown; after that, it should be a narrow string...
         final int headerLength = 3;
 
         return new String(buf, headerLength, len - headerLength);
     }
 
-    public static String[] split(String s, int ch) {
+    public static String[] split(String s, int ch)
+    {
         int size = 0;
-        for (int pos = 0; pos != -1; pos = s.indexOf(ch, pos + 1), size++);
+        for (int pos = 0; pos != -1; pos = s.indexOf(ch, pos + 1), size++) { ; }
 
         String res[] = new String[size];
         int i = 0;
@@ -170,7 +185,8 @@ public class MSSqlServerInfo
             res[i++] = s.substring(p1, p2 == -1 ? s.length() : p2);
             p1 = p2 + 1;
             p2 = s.indexOf(ch, p1);
-        } while (p1 != 0);
+        }
+        while (p1 != 0);
 
         return res;
     }
